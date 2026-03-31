@@ -1,4 +1,7 @@
+zz*
 __pycache__/
 *.pyc
 trust_store.json
 ca_data/
+certbot/
+boulder/
