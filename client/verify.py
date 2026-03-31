@@ -122,8 +122,8 @@ def verify_consistency_proof(
         if (fn & 1) or fn == sn:
             fr = hash_node(c, fr)
             sr = hash_node(c, sr)
-            # Right-shift until LSB(fn) is unset or fn is 0
-            while fn > 0 and (fn & 1):
+            # Same inner shift as inclusion proof: shift while LSB NOT set
+            while fn > 0 and not (fn & 1):
                 fn >>= 1
                 sn >>= 1
         else:
