@@ -19,9 +19,13 @@ Usage:
 
 import argparse
 import json
+import os
 import sys
+from pathlib import Path
 
 from mtc_client import MTCClient
+
+TPM_DIR = Path.home() / ".TPM"
 
 
 def pp(label: str, data, indent: int = 2):
@@ -52,12 +56,30 @@ def cmd_bootstrap(client: MTCClient):
     print(f"  Size: {log['tree_size']}, Root: {log['root_hash'][:32]}...")
 
 
+def _subject_dir(subject: str) -> Path:
+    """Get the ~/.TPM subdirectory for a subject, sanitizing the name."""
+    safe = subject.replace("/", "_").replace(":", "_")
+    return TPM_DIR / safe
+
+
 def cmd_enroll(client: MTCClient, subject: str, algorithm: str = "EC-P256"):
     """Generate a key pair and request a certificate."""
     print(f"Generating {algorithm} key pair for '{subject}'...")
     priv_pem, pub_pem = client.generate_key_pair(algorithm)
-    print(f"  Private key: {len(priv_pem)} bytes (keep secret!)")
-    print(f"  Public key:  {len(pub_pem)} bytes")
+
+    # Save keys to ~/.TPM/<subject>/
+    subdir = _subject_dir(subject)
+    subdir.mkdir(parents=True, exist_ok=True)
+
+    key_path = subdir / "private_key.pem"
+    key_path.write_text(priv_pem)
+    os.chmod(key_path, 0o600)
+
+    pub_path = subdir / "public_key.pem"
+    pub_path.write_text(pub_pem)
+
+    print(f"  Private key: {key_path}")
+    print(f"  Public key:  {pub_path}")
 
     print(f"\nRequesting certificate from CA...")
     result = client.request_certificate(
@@ -69,7 +91,17 @@ def cmd_enroll(client: MTCClient, subject: str, algorithm: str = "EC-P256"):
     )
 
     idx = result["index"]
+
+    # Save certificate to ~/.TPM/<subject>/
+    cert_path = subdir / "certificate.json"
+    with open(cert_path, "w") as f:
+        json.dump(result, f, indent=2)
+
+    # Save index for quick lookup
+    (subdir / "index").write_text(str(idx))
+
     print(f"  Certificate issued: index #{idx}")
+    print(f"  Certificate saved:  {cert_path}")
     print(f"  Trust anchor: {result['standalone_certificate']['trust_anchor_id']}")
 
     if "landmark_certificate" in result:
@@ -81,7 +113,20 @@ def cmd_enroll(client: MTCClient, subject: str, algorithm: str = "EC-P256"):
 
 def cmd_verify(client: MTCClient, index: int):
     """Fetch and verify a certificate."""
-    cert = client.get_certificate(index)
+    # Check ~/.TPM for a local copy first
+    cert = None
+    for subdir in TPM_DIR.iterdir() if TPM_DIR.exists() else []:
+        idx_file = subdir / "index"
+        if idx_file.exists() and idx_file.read_text().strip() == str(index):
+            cert_file = subdir / "certificate.json"
+            if cert_file.exists():
+                with open(cert_file) as f:
+                    cert = json.load(f)
+                print(f"(loaded from {cert_file})")
+                break
+
+    if cert is None:
+        cert = client.get_certificate(index)
     if cert is None:
         print(f"Certificate #{index} not found")
         return
@@ -153,6 +198,40 @@ def cmd_landmarks(client: MTCClient):
     pp("Trust Store", client.store.summary())
 
 
+def cmd_list_local():
+    """List locally stored certificates in ~/.TPM."""
+    if not TPM_DIR.exists():
+        print("No local certificates (~/.TPM does not exist)")
+        return
+
+    entries = []
+    for subdir in sorted(TPM_DIR.iterdir()):
+        if not subdir.is_dir():
+            continue
+        idx_file = subdir / "index"
+        cert_file = subdir / "certificate.json"
+        has_key = (subdir / "private_key.pem").exists()
+
+        idx = idx_file.read_text().strip() if idx_file.exists() else "?"
+        subject = subdir.name
+        if cert_file.exists():
+            with open(cert_file) as f:
+                cert = json.load(f)
+            subject = cert.get("standalone_certificate", {}).get("tbs_entry", {}).get("subject", subdir.name)
+
+        entries.append((idx, subject, has_key))
+
+    if not entries:
+        print("No local certificates in ~/.TPM")
+        return
+
+    print(f"Local certificates in ~/.TPM:\n")
+    for idx, subject, has_key in entries:
+        key_icon = "+" if has_key else "-"
+        print(f"  [{key_icon}] index #{idx:>4s}  {subject}")
+    print(f"\n  [+] = private key present, [-] = no private key")
+
+
 def cmd_find(client: MTCClient, query: str):
     """Search certificates by subject."""
     result = client.search_certificates(query)
@@ -179,6 +258,7 @@ def main():
 
     sub.add_parser("bootstrap", help="Bootstrap trust (fetch CA key)")
     sub.add_parser("info", help="Show server info")
+    sub.add_parser("list", help="List local certificates in ~/.TPM")
     sub.add_parser("trust-store", help="Show trust store contents")
     sub.add_parser("monitor", help="Check log consistency")
     sub.add_parser("landmarks", help="Fetch and cache landmarks")
@@ -207,6 +287,9 @@ def main():
 
     elif args.command == "info":
         pp("Server Info", client.server_info())
+
+    elif args.command == "list":
+        cmd_list_local()
 
     elif args.command == "trust-store":
         cmd_trust_store(client)
