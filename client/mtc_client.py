@@ -397,6 +397,10 @@ class MTCClient:
         except urllib.error.HTTPError:
             return None
 
+    def search_certificates(self, query: str) -> list[dict]:
+        """Search certificates by subject."""
+        return self._get(f"/certificate/search?q={query}")
+
     def server_info(self) -> dict:
         """Fetch basic server info."""
         return self._get("/")

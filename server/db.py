@@ -197,6 +197,19 @@ def load_all_certificates(conn) -> dict[int, dict]:
         return {r[0]: r[1] for r in cur.fetchall()}
 
 
+def search_certificates_by_subject(conn, query: str) -> list[dict]:
+    """Search certificates by subject (case-insensitive substring match)."""
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("""
+            SELECT index, certificate
+            FROM mtc_certificates
+            WHERE certificate->'standalone_certificate'->'tbs_entry'->>'subject'
+                  ILIKE %s
+            ORDER BY index
+        """, (f"%{query}%",))
+        return [{"index": r["index"], "certificate": r["certificate"]} for r in cur.fetchall()]
+
+
 # --- CA config (for key persistence) ---
 
 def save_ca_config(conn, key: str, value: str):

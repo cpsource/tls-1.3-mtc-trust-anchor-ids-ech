@@ -70,6 +70,8 @@ class MTCRequestHandler(BaseHTTPRequestHandler):
             self._handle_checkpoint()
         elif path == "/log/consistency":
             self._handle_consistency(qs)
+        elif path == "/certificate/search":
+            self._handle_search_certificates(qs)
         elif path.startswith("/certificate/"):
             self._handle_get_certificate(path)
         elif path == "/trust-anchors":
@@ -106,6 +108,7 @@ class MTCRequestHandler(BaseHTTPRequestHandler):
                 "GET /log/checkpoint": "Latest checkpoint",
                 "GET /log/consistency?old=N&new=M": "Consistency proof",
                 "POST /certificate/request": "Request a certificate",
+                "GET /certificate/search?q=<subject>": "Search certificates by subject",
                 "GET /certificate/<index>": "Get issued certificate",
                 "GET /trust-anchors": "List trust anchor IDs",
                 "GET /ca/public-key": "CA public key",
@@ -196,6 +199,14 @@ class MTCRequestHandler(BaseHTTPRequestHandler):
         )
 
         self._send_json(result, 201)
+
+    def _handle_search_certificates(self, qs: dict):
+        query = qs.get("q", [""])[0]
+        if not query:
+            self._send_error(400, "requires ?q=<subject> query parameter")
+            return
+        results = _ca.search_certificates(query)
+        self._send_json({"query": query, "results": results})
 
     def _handle_get_certificate(self, path: str):
         try:

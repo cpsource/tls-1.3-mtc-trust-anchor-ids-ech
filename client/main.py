@@ -153,6 +153,18 @@ def cmd_landmarks(client: MTCClient):
     pp("Trust Store", client.store.summary())
 
 
+def cmd_find(client: MTCClient, query: str):
+    """Search certificates by subject."""
+    result = client.search_certificates(query)
+    matches = result.get("results", [])
+    if not matches:
+        print(f"No certificates found matching '{query}'")
+        return
+    print(f"Found {len(matches)} certificate(s) matching '{query}':\n")
+    for m in matches:
+        print(f"  index #{m['index']:4d}  {m['subject']}")
+
+
 def cmd_trust_store(client: MTCClient):
     """Display the current trust store contents."""
     pp("Trust Store", client.store.summary())
@@ -177,6 +189,9 @@ def main():
 
     p_verify = sub.add_parser("verify", help="Verify a certificate")
     p_verify.add_argument("index", type=int, help="Certificate index")
+
+    p_find = sub.add_parser("find", help="Search certificates by subject")
+    p_find.add_argument("query", help="Subject to search for (substring match)")
 
     p_demo = sub.add_parser("demo", help="Run full demo workflow")
 
@@ -204,6 +219,9 @@ def main():
 
     elif args.command == "enroll":
         cmd_enroll(client, args.subject, args.algorithm)
+
+    elif args.command == "find":
+        cmd_find(client, args.query)
 
     elif args.command == "verify":
         cmd_verify(client, args.index)

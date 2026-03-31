@@ -56,10 +56,32 @@ The response gives Joe a **standalone certificate** containing:
 
 If a landmark is available, Joe also receives a **landmark certificate** — smaller, with no signatures, usable by relying parties that have cached the landmark subtree hash.
 
-## 5. Verify Joe's certificate
+## 5. Find Joe's certificate
+
+If you don't remember the index from enrollment, search by subject:
 
 ```bash
-python3 main.py verify <index>
+python3 main.py find bosfitch
+```
+
+Output:
+
+```
+Found 1 certificate(s) matching 'bosfitch':
+
+  index #  54  urn:ajax-inc:employee:joe.bosfitch
+```
+
+Or search via the API:
+
+```bash
+curl http://localhost:8443/certificate/search?q=bosfitch
+```
+
+## 6. Verify Joe's certificate
+
+```bash
+python3 main.py verify 54
 ```
 
 Any relying party (VPN gateway, internal service, etc.) that trusts the CA's public key can verify Joe's certificate offline — no live call to the CA needed during verification.

@@ -405,6 +405,17 @@ class CertificateAuthority:
                 self.certificates[index] = cert
         return cert
 
+    def search_certificates(self, query: str) -> list[dict]:
+        """Search certificates by subject (case-insensitive substring match)."""
+        results = db.search_certificates_by_subject(self.conn, query)
+        return [
+            {
+                "index": r["index"],
+                "subject": r["certificate"]["standalone_certificate"]["tbs_entry"]["subject"],
+            }
+            for r in results
+        ]
+
     def get_log_state(self) -> dict:
         """Return current log state for monitors / relying parties."""
         return {
