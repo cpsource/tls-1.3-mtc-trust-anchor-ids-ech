@@ -62,7 +62,8 @@ def _subject_dir(subject: str) -> Path:
     return TPM_DIR / safe
 
 
-def cmd_enroll(client: MTCClient, subject: str, algorithm: str = "EC-P256"):
+def cmd_enroll(client: MTCClient, subject: str, algorithm: str = "EC-P256",
+               extensions: dict = None):
     """Generate a key pair and request a certificate."""
     print(f"Generating {algorithm} key pair for '{subject}'...")
     priv_pem, pub_pem = client.generate_key_pair(algorithm)
@@ -81,13 +82,17 @@ def cmd_enroll(client: MTCClient, subject: str, algorithm: str = "EC-P256"):
     print(f"  Private key: {key_path}")
     print(f"  Public key:  {pub_path}")
 
+    ext = {"key_usage": "digitalSignature"}
+    if extensions:
+        ext.update(extensions)
+
     print(f"\nRequesting certificate from CA...")
     result = client.request_certificate(
         subject=subject,
         public_key_pem=pub_pem,
         key_algorithm=algorithm,
         validity_days=90,
-        extensions={"key_usage": "digitalSignature"},
+        extensions=ext,
     )
 
     idx = result["index"]
@@ -266,6 +271,8 @@ def main():
     p_enroll = sub.add_parser("enroll", help="Generate key + request certificate")
     p_enroll.add_argument("subject", help="Certificate subject (e.g. example.com)")
     p_enroll.add_argument("--algorithm", default="EC-P256", choices=["EC-P256", "Ed25519"])
+    p_enroll.add_argument("--ext", action="append", metavar="KEY=VALUE",
+                          help="Add extension (repeatable, e.g. --ext human_id='Cal Page')")
 
     p_verify = sub.add_parser("verify", help="Verify a certificate")
     p_verify.add_argument("index", type=int, help="Certificate index")
@@ -301,7 +308,11 @@ def main():
         cmd_landmarks(client)
 
     elif args.command == "enroll":
-        cmd_enroll(client, args.subject, args.algorithm)
+        ext = {}
+        for e in (args.ext or []):
+            k, _, v = e.partition("=")
+            ext[k] = v
+        cmd_enroll(client, args.subject, args.algorithm, ext or None)
 
     elif args.command == "find":
         cmd_find(client, args.query)
