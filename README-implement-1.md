@@ -196,3 +196,77 @@ If you want, I can sketch a concrete **private-PKI version** of Bob’s certific
         "
 [4]: https://groups.google.com/a/chromium.org/g/ct-policy/c/47gNi0rlClg/m/FrcqfuVVAwAJ?utm_source=chatgpt.com "Merkle Tree Certificates (a.k.a. Photosynthesis)"
 
+---
+
+# 13. Reference Implementation: `server/`
+
+A working MTC CA/Log server lives in the `server/` directory. It implements the core architecture from draft-ietf-plants-merkle-tree-certs-02 in Python, with all state persisted to a Neon PostgreSQL database.
+
+## Components
+
+| File | Role |
+|---|---|
+| `merkle.py` | Merkle Tree (RFC 9162 / MTC Section 4): append-only tree, SHA-256 leaf/node hashing, inclusion proofs, consistency proofs, verification |
+| `ca.py` | Certificate Authority + Issuance Log (MTC Sections 5-6): entry management, Ed25519 CA cosigning, standalone and landmark certificate issuance, trust anchor IDs |
+| `db.py` | PostgreSQL persistence layer: reads `MERKLE_NEON` from `~/.env`, stores entries/checkpoints/landmarks/certificates/CA key in Neon |
+| `server.py` | HTTP REST API (stdlib `http.server`, no framework dependencies) |
+| `client_demo.py` | Demo client exercising the full workflow |
+
+## Database Schema (Neon PostgreSQL)
+
+| Table | Contents |
+|---|---|
+| `mtc_log_entries` | Every log entry: index, type, TBS data (JSONB), serialized bytes, leaf hash |
+| `mtc_checkpoints` | Checkpoint snapshots: tree size, root hash, timestamp |
+| `mtc_landmarks` | Landmark tree sizes |
+| `mtc_certificates` | Issued certificates (full JSON including proofs and cosignatures) |
+| `mtc_ca_config` | CA private key (Ed25519 PEM) and other config |
+
+On startup, the Merkle tree is rebuilt in memory by replaying all stored entries from the database. This is deterministic since the log is append-only.
+
+## API Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/` | Server info and endpoint listing |
+| GET | `/log` | Current log state (tree size, root hash, landmarks, checkpoints) |
+| GET | `/log/entry/<index>` | Get a specific log entry |
+| GET | `/log/proof/<index>` | Generate and verify an inclusion proof |
+| GET | `/log/checkpoint` | Latest checkpoint |
+| GET | `/log/consistency?old=N&new=M` | Consistency proof between tree sizes |
+| POST | `/certificate/request` | Request a new MTC certificate |
+| GET | `/certificate/<index>` | Retrieve an issued certificate |
+| GET | `/trust-anchors` | List all trust anchor IDs (standalone + landmark) |
+| GET | `/ca/public-key` | CA's Ed25519 public key for cosignature verification |
+
+## Certificate Types
+
+The server issues two certificate forms per the MTC draft:
+
+- **Standalone certificate**: includes an inclusion proof to a cosigned subtree. Usable immediately by any relying party that trusts the CA cosigner. Trust anchor ID = log ID.
+- **Landmark certificate**: includes an inclusion proof to a landmark subtree (allocated every 16 entries). No signatures needed -- trust comes from predistributed landmark hashes. Trust anchor ID = log ID + landmark number.
+
+## Running
+
+```bash
+cd server
+python3 server.py                # starts on :8443, connects to Neon
+python3 client_demo.py           # in another terminal
+```
+
+Requires: Python 3.12+, `cryptography`, `psycopg2-binary`. Database connection string is read from `MERKLE_NEON` in `~/.env`.
+
+## What This Demonstrates
+
+This implementation shows the core MTC architecture is buildable without massive infrastructure:
+
+- An append-only issuance log backed by a Merkle tree
+- CA cosigning with Ed25519 (domain-separated per MTC Section 5.4.1)
+- Standalone and landmark certificate issuance
+- Inclusion and consistency proofs that verify correctly
+- Trust anchor ID assignment per the draft
+- Full persistence across server restarts via PostgreSQL
+- The tree is rebuilt deterministically from stored entries on startup
+
+It intentionally does **not** implement: external cosigners, ACME integration, DER/ASN.1 encoding, TLS handshake integration, or log pruning. Those are the next layers of complexity described in the sections above.
+
