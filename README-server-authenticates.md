@@ -79,6 +79,37 @@ The irony: to secure the CA, you need certificates. To get certificates, you nee
 
 Typically solved by having a **separate, pre-existing PKI** (even a simple self-signed CA) just for server-to-server authentication, distinct from the MTC certificates being issued to end users. The infrastructure certificates that protect the CA are not the same as the user/app certificates the CA issues.
 
+## Root CAs — the grand poobah
+
+There's a hierarchy of authority in PKI. A **Root CA** sits at the top and can revoke an entire intermediate CA:
+
+```
+Root CA (the grand poobah)
+   |
+   ├── Intermediate CA 1  (issues certs for employees)
+   ├── Intermediate CA 2  (issues certs for devices)
+   └── Intermediate CA 3  (issues certs for services)
+```
+
+The Root CA doesn't issue end-user certs directly. It signs the intermediate CAs' certificates, delegating authority. If an intermediate CA is compromised or misbehaves, the Root CA revokes its certificate — and every cert that intermediate issued becomes untrusted.
+
+This is exactly how the web works today:
+
+- Your browser ships with ~150 root CAs (Mozilla's root program, Apple's, Microsoft's)
+- Each root has signed intermediates that do the actual issuance
+- When a CA gets caught misbehaving (like DigiNotar in 2011, or Symantec in 2017), the root programs remove them and everything they issued becomes untrusted
+
+### How this maps to MTC
+
+| Traditional | MTC equivalent |
+|---|---|
+| Root CA | The trust store's list of trusted cosigner IDs |
+| Intermediate CA | The issuance log + CA cosigner |
+| Revoking an intermediate | Removing the cosigner ID from trusted list, or revoking all its indices |
+| Root signs intermediate | Cosigner's public key is predistributed to relying parties |
+
+The "grand poobah" in MTC is really **whoever controls the relying party's trust store** — the browser vendor, the OS vendor, or in a private PKI, your organization's IT security team. They decide which cosigner IDs to trust and can revoke an entire CA by removing it.
+
 ## Current state of this implementation
 
 The reference server has no authentication on `/certificate/request`. This is intentional for development and testing. Adding API token authentication to that endpoint would be the minimal first step toward production readiness.
