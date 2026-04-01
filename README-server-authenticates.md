@@ -110,6 +110,33 @@ This is exactly how the web works today:
 
 The "grand poobah" in MTC is really **whoever controls the relying party's trust store** — the browser vendor, the OS vendor, or in a private PKI, your organization's IT security team. They decide which cosigner IDs to trust and can revoke an entire CA by removing it.
 
+## What the MTC draft says about CA trust and distrust
+
+The MTC draft addresses CA hierarchy and distrust directly, though the model is flatter than traditional PKI.
+
+### Trusted cosigners (Section 7.3)
+
+The relying party decides which cosigners to trust — this is the equivalent of the root trust store. The relying party's "cosigner policy" determines which sets of cosigners must sign a log view before it's accepted. Relying parties can require a **quorum** of multiple cosigners, reducing trust in any single one (though larger quorums mean bigger standalone certificates).
+
+### Distrusting a CA (Section 7.5)
+
+The draft gives two options when a CA is found untrustworthy:
+
+1. **Nuclear option** — remove the cosigner ID entirely, killing all its certs
+2. **Surgical option** — revoke indices after a certain point, keeping older valid certs alive
+
+From the draft:
+
+> "When a CA is found to be untrustworthy, relying parties SHOULD remove trust in that CA. To minimize the compatibility impact of this mitigation, index-based revocation can be used to only distrust entries after some index, while leaving existing entries accepted."
+
+If monitors detect a CA presenting inconsistent views to different parties, relying parties can revoke the inconsistent indices and "likely remove the CA."
+
+### No explicit Root CA hierarchy
+
+MTC's trust model is **flat**, not hierarchical. The trust store directly lists cosigner IDs. There is no Root CA that signs intermediate CAs. The "grand poobah" is whoever controls the relying party's trust store — the browser vendor, the OS vendor, or your organization's IT security team.
+
+The draft has a TODO noting that intermediates *could* be encoded in X.509 intermediate certificates "if an application wishes to use this with a delegation model," but adds "the security story becomes more complex." This is an open design question in the spec.
+
 ## Current state of this implementation
 
 The reference server has no authentication on `/certificate/request`. This is intentional for development and testing. Adding API token authentication to that endpoint would be the minimal first step toward production readiness.
