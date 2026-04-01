@@ -5,6 +5,7 @@ trust_store.json
 ca_data/
 certbot/
 boulder/
+liboqs/
 api/c/*.o
 api/c/*.a
 api/c/example
