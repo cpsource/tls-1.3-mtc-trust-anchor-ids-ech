@@ -89,3 +89,43 @@ The client still has the cert locally. It still looks valid in `~/.TPM`. But eve
 | Online check needed | Download periodically | Yes, per cert | No |
 | Handles unknown entries | No | No | Yes (revoke by range) |
 | Handles CA distrust | Remove CA entirely | Remove CA entirely | Revoke range, keep valid entries |
+
+## How the server identifies callers
+
+By default, every HTTP request to the server looks the same — the server can't tell a CA cosigner from a random attacker. The server needs a way to authenticate **who** is making each request.
+
+### Who talks to the server
+
+| Caller | What they want | Access level |
+|---|---|---|
+| **Authenticating party** (client/employee) | Request a certificate | Write (dangerous) |
+| **Cosigner** | Sign subtrees after verifying the log | Write (privileged) |
+| **Monitor** | Read the log to watch for misissued certs | Read-only (safe) |
+| **Relying party** | Fetch log state, landmarks, proofs | Read-only (safe) |
+
+Read-only endpoints (`/log`, `/trust-anchors`, `/certificate/<n>`) are fine to leave open — the log is meant to be public. The dangerous endpoint is `POST /certificate/request`.
+
+### mTLS — the standard answer
+
+Mutual TLS requires the caller to present a client certificate during the TLS handshake. The server checks:
+
+1. Is this certificate signed by a CA I trust?
+2. Is the subject authorized to request certificates?
+3. What role does this caller have? (cosigner vs enrollment agent vs monitor)
+
+For cosigners specifically, the MTC draft identifies them by their **cosigner ID** (a trust anchor ID) and **public key**. The server verifies the cosigner's identity by checking their TLS client cert or by verifying signatures on the messages they send.
+
+### Authentication methods by robustness
+
+| Method | Protects | How |
+|---|---|---|
+| **API tokens** | `/certificate/request` | Bearer token in header, different tokens per role |
+| **mTLS** | All endpoints | Caller presents a client cert, server checks against an allowlist |
+| **Signed requests** | `/certificate/request` | Caller signs the request body with their registered key, server verifies |
+| **ACME account keys** | `/certificate/request` | Per RFC 8555, each ACME account has a key pair — requests are signed with the account key |
+
+### The bootstrap problem
+
+The irony: to secure the CA, you need certificates. To get certificates, you need the CA.
+
+Typically solved by having a **separate, pre-existing PKI** (even a simple self-signed CA) just for server-to-server authentication, distinct from the MTC certificates being issued to end users. The infrastructure certificates that protect the CA are not the same as the user/app certificates the CA issues.
