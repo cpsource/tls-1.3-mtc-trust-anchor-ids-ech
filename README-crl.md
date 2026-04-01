@@ -55,6 +55,31 @@ if any(start <= index < end for start, end in revoked_ranges):
 
 The revoked ranges would be updated in the background alongside landmark fetches — part of the same periodic trust store update that relying parties already need to do.
 
+## Who revokes?
+
+The client never revokes their own certificate — that would be like tearing up your own ID badge. The **relying party** (the server/service verifying the cert) maintains the revoked ranges. Those ranges come from a trusted authority.
+
+```
+CA or security team: "indices [42, 43) are revoked"
+        |
+        v
+    Update channel (browser update, config push, API)
+        |
+        v
+    Relying party's trust store gets updated revoked ranges
+        |
+        v
+    Next time cert #42 is presented: rejected
+```
+
+The client (Joe with his cert in `~/.TPM`) has no say in this. The revocation decision comes from:
+
+- **The CA** — "we misissued this" or "key compromise reported"
+- **The organization's security team** — "Joe was terminated" or "this device was lost"
+- **Policy automation** — "these entries were pruned from the log, revoke them automatically"
+
+The client still has the cert locally. It still looks valid in `~/.TPM`. But every relying party that has received the revocation update will reject it.
+
 ## Comparison
 
 | | Traditional CRL | OCSP | MTC Revocation by Index |
